@@ -1,0 +1,129 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: omxplayer
+# Required-Start:
+# Required-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Displays camera feeds for monitoring
+# Description:
+### END INIT INFO
+
+cd `dirname $0`
+CAMIP=`cat ./CAMIP.txt`
+#This bash need screen, bc and omxplayer. Please install them at first
+#sudo apt install -y screen bc omxplayer
+
+
+# Camera Feeds & Positions
+THERMAL="screen -dmS THERMAL sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP"/Streaming/Channels/201 --win \"0 0 1080 960\" --live -n -1'";
+VISIBLE="screen -dmS VISIBLE sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP"/Streaming/Channels/102 --win \"0 1080 1080 1800\" --live -b -n -1'";
+
+
+# Camera Feed Names
+# (variable names from above, separated by a space)
+camera_feeds=("THERMAL" "VISIBLE")
+
+#For watching CPU useage
+threshold=0.7
+t_CPU=0
+v_CPU=0
+
+
+case "$1" in
+#---------------------------------------------------------------------
+# Start displaying camera feeds
+start)
+isAlive=`ps -ef | grep omxplayer.bin | grep -v grep | wc -l`
+
+if [ $isAlive -eq ${#camera_feeds[*]} ]; then
+    echo "Camera Display looks OK... NO NEED TO START AGAIN"
+    for i in "${camera_feeds[@]}"
+    do
+        if [ `sudo screen -list | grep $i | wc -l` == 1 ]; then
+        echo "$i is running."
+        fi
+    done
+
+else
+    for i in "${camera_feeds[@]}"
+    do
+    eval eval '$'$i
+    done
+    echo "Camera Display Started"
+fi
+;;
+#---------------------------------------------------------------------
+# Stop displaying camera feeds
+stop)
+sudo killall omxplayer.bin
+echo "Camera Display KILLED"
+;;
+#---------------------------------------------------------------------
+# Restart all camera feeds that have died
+repair)
+isAlive=`ps -ef | grep omxplayer.bin | grep -v grep | wc -l`
+if [ $isAlive == ${#camera_feeds[*]} ]; then
+
+    #---------------------------------------------------------------------
+    #get each CPU USEAGE for THERMAL AND VISIBLE omxplayers
+    ps aux |grep /usr/bin/omxplayer.bin | grep 201 |grep -v grep |while read tUSER tPID tCPU tMEM 
+        #VSZ RSS TTY STAT STARTDATE STARTTIME
+    do
+	   #echo $tCPU
+       echo "THERMAL CPU : $tCPU %"
+    done
+
+    ps aux |grep /usr/bin/omxplayer.bin | grep 102 |grep -v grep |while read vUSER vPID vCPU vMEM 
+        #VSZ RSS TTY STAT STARTDATE STARTTIME
+    do
+	   #echo $vCPU
+       echo "VISIBLE CPU : $vCPU %"
+    done
+    #---------------------------------------------------------------------
+	
+        if [ '`echo "$threshold > $tCPU" | bc`' == 1 ]; then
+            echo "THERMAL DISPLAY DIED"
+            sudo killall omxplayer.bin
+            sleep 1
+            sudo ./thermalcameras start
+            
+        elif [ '`echo "$threshold > $vCPU" | bc`' == 1 ]; then
+            echo "VISIBLE DISPLAY DIED"
+            sudo killall omxplayer.bin
+            sleep 1
+            sudo ./thermalcameras start
+        
+        else
+            echo "Looks OK."
+        fi
+
+else
+    sudo killall omxplayer.bin
+    for i in "${camera_feeds[@]}"
+    do
+    eval eval '$'$i
+    sleep 1
+    done
+    echo "Camera Display Started"
+fi
+;;
+#---------------------------------------------------------------------
+# Make logfile
+log)
+  LOG_TIME=`date '+%Y/%m/%d_%H:%M:%S'`
+  LOG_DATE=`date '+%Y%m%d'`
+  LOG_FILE="/home/pi/log/log${LOG_DATE}.log"
+
+# ps command
+  echo -e "\nps cmd: ${LOG_TIME} \n*******************" >> $LOG_FILE
+  sudo ps aux |egrep 'PID|omxplayer.bin' |grep -v 'grep' >> $LOG_FILE
+
+;;
+
+*)
+echo "Usage: ./thermalcameras {start|stop|repair|log}"
+exit 1
+;;
+esac
+
