@@ -16,6 +16,7 @@ sudo crontab -r
 (sudo crontab -l; echo "*/1 * * * * sudo /home/pi/thermalcameras repair") | sudo crontab -
 #(sudo crontab -l; echo "*/10 * * * * sudo /home/pi/thermalcameras log") | sudo crontab -
 (sudo crontab -l; echo "01 00 * * * sudo /sbin/reboot") | sudo crontab -
+(sudo crontab -l; echo "02 */1 * * * sudo /home/pi/thermalcameras mail") | sudo crontab -
 
-sudo apt install -y omxplayer screen bc && sudo reboot now
+sudo apt update && sudo apt install -y omxplayer screen bc arp-scan && sudo reboot now
 

@@ -1,23 +1,19 @@
 #!/bin/bash
-### BEGIN INIT INFO
-# Provides: omxplayer
-# Required-Start:
-# Required-Stop:
-# Default-Start: 2 3 4 5
-# Default-Stop: 0 1 6
-# Short-Description: Displays camera feeds for monitoring
-# Description:
-### END INIT INFO
 
 cd `dirname $0`
+
+info=$(echo `sudo arp-scan -l --interface eth0 | grep "58:50:ed:"`)
+ip=$(echo $info | cut -d " " -f1)
+echo $ip > ./CAMIP.txt
+
 CAMIP=`cat ./CAMIP.txt`
 #This bash need screen, bc and omxplayer. Please install them at first
 #sudo apt install -y screen bc omxplayer
 
 
 # Camera Feeds & Positions
-THERMAL="screen -dmS THERMAL sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP"/Streaming/Channels/201 --win \"0 0 1080 960\" --live -n -1'";
-VISIBLE="screen -dmS VISIBLE sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP"/Streaming/Channels/102 --win \"0 1080 1080 1800\" --live -b -n -1'";
+THERMAL="screen -dmS THERMAL sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP":554/Streaming/Channels/201 --win \"0 0 1080 960\" --live -n -1'";
+VISIBLE="screen -dmS VISIBLE sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP":554/Streaming/Channels/102 --win \"0 1080 1080 1800\" --live -b -n -1'";
 
 
 # Camera Feed Names
@@ -25,10 +21,10 @@ VISIBLE="screen -dmS VISIBLE sh -c 'omxplayer rtsp://admin:soya4462@"$CAMIP"/Str
 camera_feeds=("THERMAL" "VISIBLE")
 
 #For watching CPU useage
-threshold=0.7
-t_CPU=0
-v_CPU=0
-
+declare -i threshold
+declare -i thermalCPU
+declare -i visibleCPU
+threshold=30
 
 case "$1" in
 #---------------------------------------------------------------------
@@ -49,6 +45,7 @@ else
     for i in "${camera_feeds[@]}"
     do
     eval eval '$'$i
+    sleep 0.5
     done
     echo "Camera Display Started"
 fi
@@ -56,22 +53,81 @@ fi
 #---------------------------------------------------------------------
 # Stop displaying camera feeds
 stop)
-sudo killall omxplayer.bin
+sudo killall omxplayer
 echo "Camera Display KILLED"
 ;;
 #---------------------------------------------------------------------
 # Restart all camera feeds that have died
 repair)
 isAlive=`ps -ef | grep omxplayer.bin | grep -v grep | wc -l`
-if [ $isAlive == ${#camera_feeds[*]} ]; then
-
+echo "Threshold : $threshold "
     #---------------------------------------------------------------------
     #get each CPU USEAGE for THERMAL AND VISIBLE omxplayers
     ps aux |grep /usr/bin/omxplayer.bin | grep 201 |grep -v grep |while read tUSER tPID tCPU tMEM 
         #VSZ RSS TTY STAT STARTDATE STARTTIME
     do
 	   #echo $tCPU
+       #echo "THERMAL CPU : $tCPU %"
+       thermalCPU=`echo "$tCPU * 10/1"|bc`
+       echo $thermalCPU  > ./CPUt.txt
+       echo "THERMAL CPUx10 :  $(echo `cat ./CPUt.txt`) "
+    done
+
+    ps aux |grep /usr/bin/omxplayer.bin | grep 102 |grep -v grep |while read vUSER vPID vCPU vMEM 
+        #VSZ RSS TTY STAT STARTDATE STARTTIME
+    do
+	   #echo $vCPU
+       #echo "VISIBLE CPU : $vCPU %"
+       visibleCPU=`echo "$vCPU * 10/1"|bc`
+       echo $visibleCPU  > ./CPUv.txt
+       echo "VISIBLE CPUx10 :  $(echo `cat ./CPUv.txt`) "
+    done
+
+    
+    #---------------------------------------------------------------------
+	
+if [ $isAlive -eq ${#camera_feeds[*]} ];then
+    echo "DISPLAY LOOKS OK. Checking CPU Useage..."
+    
+        if [ $threshold -gt `cat ./CPUt.txt` ]; then
+            echo "THERMAL DISPLAY IS DEAD. Need to reboot the App."
+            sudo killall omxplayer
+            sleep 0.5
+            sudo ./thermalcameras start
+        else
+            if [ $threshold -gt `cat ./CPUv.txt` ]; then
+                echo "VISIBLE DISPLAY IS DEAD. Need to reboot the App."
+                sudo killall omxplayer
+                sleep 0.5
+                sudo sudo ./thermalcameras start
+            else
+            echo "OK"
+            fi
+        fi
+    
+else
+    echo "DISPLAY IS DEAD"
+    sudo killall omxplayer.bin
+    sleep 0.5
+    sudo ./thermalcameras start
+
+        
+fi
+;;
+
+#---------------------------------------------------------------------
+# Check CPU Useage
+chk)
+    echo "Camera IP is :  $CAMIP"
+    #get each CPU USEAGE for THERMAL AND VISIBLE omxplayers
+    ps aux |grep /usr/bin/omxplayer.bin | grep 201 |grep -v grep |while read tUSER tPID tCPU tMEM 
+        #VSZ RSS TTY STAT STARTDATE STARTTIME
+    do
+	   #echo $tCPU
        echo "THERMAL CPU : $tCPU %"
+       thermalCPU=`echo "$tCPU * 10/1"|bc`
+       echo $thermalCPU  > ./CPUt.txt
+       echo "THERMAL CPUx10 :  $(echo `cat ./CPUt.txt`) "
     done
 
     ps aux |grep /usr/bin/omxplayer.bin | grep 102 |grep -v grep |while read vUSER vPID vCPU vMEM 
@@ -79,34 +135,11 @@ if [ $isAlive == ${#camera_feeds[*]} ]; then
     do
 	   #echo $vCPU
        echo "VISIBLE CPU : $vCPU %"
+       visibleCPU=`echo "$vCPU * 10/1"|bc`
+       echo $visibleCPU  > ./CPUv.txt
+       echo "VISIBLE CPUx10 :  $(echo `cat ./CPUv.txt`) "
     done
-    #---------------------------------------------------------------------
-	
-        if [ '`echo "$threshold > $tCPU" | bc`' == 1 ]; then
-            echo "THERMAL DISPLAY DIED"
-            sudo killall omxplayer.bin
-            sleep 1
-            sudo ./thermalcameras start
-            
-        elif [ '`echo "$threshold > $vCPU" | bc`' == 1 ]; then
-            echo "VISIBLE DISPLAY DIED"
-            sudo killall omxplayer.bin
-            sleep 1
-            sudo ./thermalcameras start
-        
-        else
-            echo "Looks OK."
-        fi
 
-else
-    sudo killall omxplayer.bin
-    for i in "${camera_feeds[@]}"
-    do
-    eval eval '$'$i
-    sleep 1
-    done
-    echo "Camera Display Started"
-fi
 ;;
 #---------------------------------------------------------------------
 # Make logfile
@@ -120,10 +153,17 @@ log)
   sudo ps aux |egrep 'PID|omxplayer.bin' |grep -v 'grep' >> $LOG_FILE
 
 ;;
+#---------------------------------------------------------------------
+# send mail
+mail)
+    sudo python3 ./sendGmailPi.py
+    sudo python3 ./sendTodamailPi.py
+;;
 
 *)
-echo "Usage: ./thermalcameras {start|stop|repair|log}"
+echo "Usage: ./thermalcameras {start|stop|repair|log|chk|mail}"
 exit 1
 ;;
 esac
+
 
