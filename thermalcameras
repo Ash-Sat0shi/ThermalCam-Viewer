@@ -113,6 +113,7 @@ else
 
         
 fi
+ping -w 55 10.1.25.158 & ping -w 55 google.com
 ;;
 
 #---------------------------------------------------------------------
@@ -165,5 +166,6 @@ echo "Usage: ./thermalcameras {start|stop|repair|log|chk|mail}"
 exit 1
 ;;
 esac
+
 
 
